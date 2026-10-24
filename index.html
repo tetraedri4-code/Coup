@@ -1,0 +1,1393 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#15121a">
+<meta name="description" content="Play the Coup card game with friends in the browser. Create a room, share the link, bluff.">
+<title>Coup Online</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&family=Public+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: one narrow column like a hand of cards held up — court header, the table, your hand at the bottom. */
+:root {
+  --ink: #15121a;        /* page */
+  --felt: #201b27;       /* panels */
+  --felt-2: #2b2433;     /* raised */
+  --line: #3a3144;
+  --parchment: #ece3d2;  /* text */
+  --muted: #a1969f;
+  --brass: #c9a24a;      /* accent, coins */
+  --brass-ink: #1b1408;
+  --blood: #c33a41;      /* challenge / lost */
+  --duke: #6d3b8f; --assassin: #3b3a44; --captain: #2c5f9e; --ambassador: #2c7a52; --contessa: #a8303a;
+  --display: "Bodoni Moda", "Didot", "Bodoni 72", Georgia, serif;
+  --body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--ink); color: var(--parchment);
+  font: 15px/1.45 var(--body);
+  -webkit-tap-highlight-color: transparent;
+}
+[hidden] { display: none !important; }
+button { font: inherit; color: inherit; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+
+#app {
+  height: 100%; max-width: 560px; margin: 0 auto;
+  display: flex; flex-direction: column;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* ---------- buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 46px; padding: 0 18px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--felt-2); cursor: pointer; font-weight: 600; letter-spacing: .01em;
+}
+.btn:disabled { opacity: .38; cursor: default; }
+.btn.primary { background: var(--brass); color: var(--brass-ink); border-color: transparent; }
+.btn.danger { background: var(--blood); color: #fff; border-color: transparent; }
+.btn.ghost { background: transparent; }
+.btn.wide { width: 100%; }
+.iconbtn { width: 40px; height: 40px; border-radius: 10px; border: 0; background: transparent; cursor: pointer; display: grid; place-items: center; color: var(--muted); }
+.iconbtn svg { width: 22px; height: 22px; }
+.link { background: none; border: 0; color: var(--brass); cursor: pointer; padding: 6px 0; font-weight: 600; }
+
+input.field {
+  width: 100%; min-height: 48px; padding: 0 14px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--felt); color: var(--parchment); font: inherit; font-size: 16px;
+}
+input.code { font-family: var(--mono); text-transform: uppercase; letter-spacing: .3em; }
+label.lbl { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin-bottom: 6px; }
+
+/* ---------- home ---------- */
+.home { display: flex; flex-direction: column; gap: 22px; padding-block: 36px 28px; overflow-y: auto; }
+.brand { text-align: center; }
+.brand h1 { font: 700 clamp(64px, 20vw, 104px)/.9 var(--display); letter-spacing: .06em; margin: 0; color: var(--parchment); }
+.brand h1 span { color: var(--brass); }
+.brand p { margin: 10px 0 0; color: var(--muted); }
+.fan { display: flex; justify-content: center; height: 92px; margin-top: 8px; }
+.fan .card { --w: 56px; margin: 0 -10px; transform-origin: 50% 120%; }
+.fan .card b { display: none; }
+.fan .card:nth-child(1) { transform: rotate(-20deg); }
+.fan .card:nth-child(2) { transform: rotate(-10deg) translateY(-4px); }
+.fan .card:nth-child(3) { transform: translateY(-7px); }
+.fan .card:nth-child(4) { transform: rotate(10deg) translateY(-4px); }
+.fan .card:nth-child(5) { transform: rotate(20deg); }
+.panel { background: var(--felt); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; gap: 8px; }
+.row > .grow { flex: 1; min-width: 0; }
+.divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .14em; }
+.divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.resume { border-color: var(--brass); }
+.note { color: var(--muted); font-size: 13px; margin: 0; }
+
+/* ---------- room chrome ---------- */
+.bar { display: flex; align-items: center; gap: 4px; padding-block: 8px; }
+.bar .title { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; }
+.bar .title b { font: 700 22px var(--display); letter-spacing: .05em; }
+.bar .title .code { font: 500 13px var(--mono); letter-spacing: .2em; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+.dot.on { background: #5bbf7c; } .dot.off { background: #e0913b; }
+.netmsg { background: #4a2f12; color: #f4d6ad; border-radius: 10px; padding: 8px 12px; font-size: 13px; margin-bottom: 8px; }
+
+/* ---------- lobby ---------- */
+.lobby { display: flex; flex-direction: column; gap: 16px; padding-block: 8px 24px; overflow-y: auto; }
+.invite { text-align: center; }
+.invite .big { font: 500 clamp(38px, 13vw, 56px)/1 var(--mono); letter-spacing: .22em; color: var(--brass); margin: 6px 0 12px; padding-left: .22em; }
+.people { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.people li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--felt); border-radius: 10px; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; background: var(--felt-2); border: 1px solid var(--line); flex: none; }
+.people .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
+.tag.host { border-color: var(--brass); color: var(--brass); }
+
+/* ---------- cards ---------- */
+.card {
+  --w: 100px; --c: var(--felt-2);
+  width: var(--w); height: calc(var(--w) * 1.42); flex: none; position: relative;
+  border-radius: calc(var(--w) * .09); color: #fff;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.12), rgba(0,0,0,.35)),
+    var(--c);
+  border: 1px solid rgba(255,255,255,.18);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: calc(var(--w) * .05); padding: calc(var(--w) * .08); text-align: center;
+  box-shadow: 0 6px 16px rgba(0,0,0,.35);
+  transition: transform .15s ease, box-shadow .15s ease, opacity .2s;
+}
+.card::before { content: ""; position: absolute; inset: calc(var(--w) * .05); border: 1px solid rgba(255,255,255,.22); border-radius: calc(var(--w) * .06); pointer-events: none; }
+.card svg { width: calc(var(--w) * .36); height: calc(var(--w) * .36); }
+.card b { font: 700 calc(var(--w) * .12)/1 var(--display); letter-spacing: .04em; text-transform: uppercase; }
+.card small { font-size: calc(var(--w) * .085); line-height: 1.25; color: rgba(255,255,255,.78); }
+.card.r-duke { --c: var(--duke); } .card.r-assassin { --c: var(--assassin); } .card.r-captain { --c: var(--captain); }
+.card.r-ambassador { --c: var(--ambassador); } .card.r-contessa { --c: var(--contessa); }
+.card.back {
+  background: repeating-linear-gradient(45deg, #2a2231 0 6px, #241d2a 6px 12px);
+  border-color: rgba(201,162,74,.55);
+}
+.card.back::after { content: "C"; font: 700 calc(var(--w) * .4) var(--display); color: var(--brass); opacity: .9; }
+.card.lost { opacity: .32; filter: grayscale(.6); box-shadow: none; }
+.card.lost::after { content: ""; position: absolute; left: 12%; right: 12%; top: 50%; height: 2px; background: var(--blood); transform: rotate(-35deg); }
+.card.pick { cursor: pointer; }
+.card.pick:hover { transform: translateY(-4px); }
+.card.sel { transform: translateY(-10px); box-shadow: 0 0 0 3px var(--brass), 0 10px 20px rgba(0,0,0,.4); }
+.card.mini { --w: 26px; padding: 0; box-shadow: none; }
+.card.mini::before { display: none; }
+.card.mini svg { width: 14px; height: 14px; }
+.card.mini b, .card.mini small { display: none; }
+.card.mini.back::after { font-size: 13px; }
+
+/* ---------- table ---------- */
+.table { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding-bottom: 12px; }
+.foes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.foes.n1 { grid-template-columns: minmax(0, 1fr); }
+.foes.n2, .foes.n4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.foe { background: var(--felt); border: 2px solid transparent; border-radius: 12px; padding: 7px 8px; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.foe.turn { border-color: var(--brass); }
+.foe.out { opacity: .45; }
+.foe .who { display: flex; align-items: center; gap: 5px; font-weight: 600; font-size: 13px; min-width: 0; }
+.foe .who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.foe .stuff { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+.foe .hand { display: flex; gap: 3px; }
+.foe .state { font-size: 11px; color: var(--brass); min-height: 15px; }
+.coin { display: inline-grid; place-items: center; border-radius: 50%; width: 24px; height: 24px; flex: none;
+  background: radial-gradient(circle at 35% 30%, #f3d98c, var(--brass) 55%, #8d6b25);
+  color: var(--brass-ink); font: 500 12px var(--mono); }
+.coin.big { width: 50px; height: 50px; font-size: 20px; }
+.banner { background: rgba(201,162,74,.12); border: 1px solid rgba(201,162,74,.35); border-radius: 12px; padding: 10px 12px; text-align: center; }
+.banner strong { display: block; font: 700 17px/1.25 var(--display); text-wrap: balance; }
+.banner span { font-size: 12px; color: var(--muted); }
+.log { flex: 1; min-height: 64px; overflow-y: auto; margin: 0; padding: 8px 12px; list-style: none; background: var(--felt); border-radius: 12px; font-size: 13px; color: var(--muted); }
+.log li { padding: 2px 0; }
+.log li:first-child { color: var(--parchment); }
+.mine { display: flex; align-items: flex-end; justify-content: center; gap: 12px; padding-top: 6px; }
+.mine .coins { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
+.controls { display: flex; flex-direction: column; gap: 8px; }
+.hint { text-align: center; color: var(--muted); margin: 0; padding: 6px 0; }
+.actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.act { min-height: 54px; border-radius: 10px; border: 1px solid rgba(255,255,255,.12); cursor: pointer; padding: 6px 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; background: var(--felt-2); color: #fff; }
+.act b { font-size: 14px; }
+.act small { font-size: 11px; color: rgba(255,255,255,.72); }
+.act:disabled { opacity: .3; cursor: default; }
+.act.r-duke { background: var(--duke); } .act.r-assassin { background: var(--assassin); } .act.r-captain { background: var(--captain); } .act.r-ambassador { background: var(--ambassador); }
+.respond { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.respond .btn { flex: 1 1 140px; }
+.choices { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; padding-top: 10px; }
+.choices .card { --w: 76px; }
+.choices .card small { display: none; }
+.winner { text-align: center; font: 700 30px var(--display); margin: 4px 0; }
+
+/* ---------- sheets & toast ---------- */
+.scrim { position: fixed; inset: 0; background: rgba(8,6,10,.6); display: flex; align-items: flex-end; justify-content: center; z-index: 20; }
+.sheet { width: 100%; max-width: 560px; max-height: 85%; overflow-y: auto; background: var(--felt); border-radius: 18px 18px 0 0; border: 1px solid var(--line); border-bottom: 0;
+  padding: 18px max(18px, env(safe-area-inset-right, 0px)) calc(18px + env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px)); }
+.sheet h2 { font: 700 22px var(--display); margin: 0 0 12px; }
+.sheet h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin: 18px 0 8px; }
+.sheet p { margin: 0 0 10px; max-width: 65ch; }
+.pickrow { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px; margin-bottom: 6px; border-radius: 10px; border: 1px solid var(--line); background: var(--felt-2); cursor: pointer; text-align: left; }
+.pickrow .grow { flex: 1; }
+.rolerow { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+.rolerow .card { --w: 46px; padding: 0; }
+.rolerow .card b, .rolerow .card small { display: none; }
+.rolerow .card::before { display: none; }
+.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--parchment); color: var(--ink); padding: 10px 16px; border-radius: 10px; font-weight: 600; z-index: 30; max-width: calc(100% - 32px); box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+
+@media (max-height: 700px) {
+  .mine .card { --w: 78px; }
+  .choices .card { --w: 64px; }
+  .mine .card small { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="layer"></div>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+// Coup rules engine. Pure functions over a plain JSON state object so the
+// host can save it and every message is serialisable.
+(function (root) {
+  'use strict';
+
+  const ROLES = ['duke', 'assassin', 'captain', 'ambassador', 'contessa'];
+  const ROLE_LABEL = {
+    duke: 'Duke', assassin: 'Assassin', captain: 'Captain',
+    ambassador: 'Ambassador', contessa: 'Contessa',
+  };
+  const ACTIONS = {
+    income:      { label: 'Income',      cost: 0, claim: null,         target: false, blockers: [] },
+    foreignAid:  { label: 'Foreign Aid', cost: 0, claim: null,         target: false, blockers: ['duke'] },
+    coup:        { label: 'Coup',        cost: 7, claim: null,         target: true,  blockers: [] },
+    tax:         { label: 'Tax',         cost: 0, claim: 'duke',       target: false, blockers: [] },
+    assassinate: { label: 'Assassinate', cost: 3, claim: 'assassin',   target: true,  blockers: ['contessa'], targetBlocks: true },
+    steal:       { label: 'Steal',       cost: 0, claim: 'captain',    target: true,  blockers: ['captain', 'ambassador'], targetBlocks: true },
+    exchange:    { label: 'Exchange',    cost: 0, claim: 'ambassador', target: false, blockers: [] },
+  };
+  const MAX_PLAYERS = 6;
+
+  class GameError extends Error {}
+  const fail = (m) => { throw new GameError(m); };
+
+  function shuffle(a) {
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function newGame() {
+    return {
+      phase: 'lobby', players: [], deck: [], turn: 0,
+      action: null, actor: null, target: null, challengeDone: false,
+      blocker: null, blockRole: null, passed: [],
+      loser: null, after: null, exchange: [], winner: null, log: [],
+    };
+  }
+
+  // ------------------------------------------------------------ helpers
+  const P = (g, id) => g.players.find((p) => p.id === id) || null;
+  const need = (g, id) => P(g, id) || fail('Unknown player.');
+  const alive = (p) => p.cards.some((c) => !c.revealed);
+  const hidden = (p) => p.cards.filter((c) => !c.revealed).length;
+  const has = (p, r) => p.cards.some((c) => !c.revealed && c.role === r);
+  const alivePlayers = (g) => g.players.filter(alive);
+  const current = (g) => g.players[g.turn];
+  const log = (g, s) => { g.log.push(s); if (g.log.length > 200) g.log.shift(); };
+  const draw = (g) => g.deck.pop();
+
+  function clearTurn(g) {
+    Object.assign(g, {
+      action: null, actor: null, target: null, challengeDone: false,
+      blocker: null, blockRole: null, passed: [], loser: null, after: null,
+      exchange: [],
+    });
+  }
+
+  // ------------------------------------------------------------ lobby
+  function addPlayer(g, id, name) {
+    if (g.phase !== 'lobby') fail('Game already started.');
+    if (g.players.length >= MAX_PLAYERS) fail('The room is full (6 players).');
+    g.players.push({ id, name, coins: 2, cards: [], connected: true });
+  }
+
+  function removePlayer(g, id) {
+    if (g.phase !== 'lobby') return;
+    g.players = g.players.filter((p) => p.id !== id);
+  }
+
+  function start(g) {
+    if (g.phase !== 'lobby' && g.phase !== 'gameOver') fail('Game already running.');
+    g.players = g.players.filter((p) => p.connected);
+    if (g.players.length < 2) fail('Need at least 2 players.');
+    g.deck = shuffle(ROLES.flatMap((r) => [r, r, r]));
+    for (const p of g.players) {
+      p.coins = 2;
+      p.cards = [{ role: draw(g), revealed: false }, { role: draw(g), revealed: false }];
+    }
+    g.turn = Math.floor(Math.random() * g.players.length);
+    if (g.players.length === 2) current(g).coins = 1; // official 2-player rule
+    g.winner = null;
+    g.log = [];
+    clearTurn(g);
+    g.phase = 'action';
+    log(g, `Game started. ${current(g).name} goes first.`);
+  }
+
+  function backToLobby(g) {
+    g.phase = 'lobby';
+    g.players = g.players.filter((p) => p.connected);
+    for (const p of g.players) { p.cards = []; p.coins = 2; }
+    clearTurn(g);
+    g.winner = null;
+  }
+
+  // ------------------------------------------------------------ eligibility
+  const A = (g) => ACTIONS[g.action];
+  const canChallengeAction = (g, q) => g.phase === 'respondAction' && alive(q) &&
+    q.id !== g.actor && !!A(g).claim && !g.challengeDone;
+  const canBlockAction = (g, q) => g.phase === 'respondAction' && alive(q) &&
+    q.id !== g.actor && A(g).blockers.length > 0 &&
+    (!A(g).targetBlocks || q.id === g.target);
+  const canChallengeBlock = (g, q) => g.phase === 'respondBlock' && alive(q) &&
+    q.id !== g.blocker;
+  const mustRespond = (g, q) => !g.passed.includes(q.id) &&
+    (canChallengeAction(g, q) || canBlockAction(g, q) || canChallengeBlock(g, q));
+
+  // ------------------------------------------------------------ actions
+  function declareAction(g, pid, action, targetId) {
+    if (g.phase !== 'action') fail('It is not time to choose an action.');
+    const me = current(g);
+    if (me.id !== pid) fail('It is not your turn.');
+    const a = ACTIONS[action] || fail('Unknown action.');
+    if (me.coins >= 10 && action !== 'coup') fail('With 10 or more coins you must Coup.');
+    if (me.coins < a.cost) fail(`${a.label} costs ${a.cost} coins.`);
+    let t = null;
+    if (a.target) {
+      t = P(g, targetId);
+      if (!t || !alive(t) || t.id === pid) fail('Choose a valid target.');
+    }
+    clearTurn(g);
+    g.action = action; g.actor = pid; g.target = t ? t.id : null;
+    me.coins -= a.cost;
+
+    switch (action) {
+      case 'income':
+        me.coins += 1;
+        log(g, `${me.name} takes Income (+1).`);
+        return endTurn(g);
+      case 'coup':
+        log(g, `${me.name} launches a Coup against ${t.name}.`);
+        return loseInfluence(g, t.id, 'endTurn');
+      case 'foreignAid': log(g, `${me.name} attempts Foreign Aid.`); break;
+      case 'tax': log(g, `${me.name} claims Duke to collect Tax.`); break;
+      case 'assassinate': log(g, `${me.name} claims Assassin and pays 3 to assassinate ${t.name}.`); break;
+      case 'steal': log(g, `${me.name} claims Captain to steal from ${t.name}.`); break;
+      case 'exchange': log(g, `${me.name} claims Ambassador to exchange cards.`); break;
+    }
+    g.phase = 'respondAction';
+    checkResponses(g);
+  }
+
+  function challenge(g, pid) {
+    const me = need(g, pid);
+    if (g.passed.includes(pid)) fail('You already allowed this.');
+    if (canChallengeAction(g, me)) {
+      const actor = need(g, g.actor);
+      const role = A(g).claim;
+      log(g, `${me.name} challenges ${actor.name}'s ${ROLE_LABEL[role]}.`);
+      if (has(actor, role)) {
+        revealAndReplace(g, actor, role);
+        g.challengeDone = true;
+        log(g, `${me.name} loses the challenge.`);
+        return loseInfluence(g, me.id, 'actionChallengeWon');
+      }
+      log(g, `${actor.name} was bluffing!`);
+      if (g.action === 'assassinate') actor.coins += A(g).cost; // refunded
+      return loseInfluence(g, actor.id, 'endTurn');
+    }
+    if (canChallengeBlock(g, me)) {
+      const blocker = need(g, g.blocker);
+      const role = g.blockRole;
+      log(g, `${me.name} challenges ${blocker.name}'s ${ROLE_LABEL[role]}.`);
+      if (has(blocker, role)) {
+        revealAndReplace(g, blocker, role);
+        log(g, `${me.name} loses the challenge. The block stands.`);
+        return loseInfluence(g, me.id, 'endTurn');
+      }
+      log(g, `${blocker.name} was bluffing! The block fails.`);
+      return loseInfluence(g, blocker.id, 'resolveAction');
+    }
+    fail('You cannot challenge now.');
+  }
+
+  function block(g, pid, role) {
+    const me = need(g, pid);
+    if (!canBlockAction(g, me) || g.passed.includes(pid)) fail('You cannot block now.');
+    if (!A(g).blockers.includes(role)) fail(`${ROLE_LABEL[role] || role} cannot block ${A(g).label}.`);
+    g.blocker = pid; g.blockRole = role; g.passed = [];
+    g.phase = 'respondBlock';
+    log(g, `${me.name} claims ${ROLE_LABEL[role]} to block ${A(g).label}.`);
+    checkResponses(g);
+  }
+
+  function pass(g, pid) {
+    const me = need(g, pid);
+    if (!mustRespond(g, me)) fail('Nothing to respond to.');
+    g.passed.push(pid);
+    checkResponses(g);
+  }
+
+  function setConnected(g, pid, connected) {
+    const p = P(g, pid);
+    if (!p) return;
+    p.connected = connected;
+    onConnectionChanged(g);
+  }
+
+  // Disconnected players never hold up a response window or a card loss.
+  function onConnectionChanged(g) {
+    if (g.phase === 'loseCard') {
+      const l = P(g, g.loser);
+      if (l && !l.connected) {
+        const i = l.cards.findIndex((c) => !c.revealed);
+        if (i >= 0) chooseLoss(g, l.id, i);
+        return;
+      }
+    }
+    if (g.phase === 'respondAction' || g.phase === 'respondBlock') checkResponses(g);
+  }
+
+  function checkResponses(g) {
+    if (g.players.some((q) => q.connected && mustRespond(g, q))) return;
+    if (g.phase === 'respondAction') resolveAction(g);
+    else if (g.phase === 'respondBlock') {
+      log(g, `${A(g).label} is blocked.`);
+      endTurn(g);
+    }
+  }
+
+  function revealAndReplace(g, p, role) {
+    const card = p.cards.find((c) => !c.revealed && c.role === role);
+    g.deck.push(role);
+    shuffle(g.deck);
+    card.role = draw(g);
+    log(g, `${p.name} reveals ${ROLE_LABEL[role]}, shuffles it back and draws a new card.`);
+  }
+
+  function resolveAction(g) {
+    const actor = need(g, g.actor);
+    if (!alive(actor)) return endTurn(g);
+    const target = P(g, g.target);
+    switch (g.action) {
+      case 'foreignAid':
+        actor.coins += 2;
+        log(g, `${actor.name} takes 2 coins of Foreign Aid.`);
+        break;
+      case 'tax':
+        actor.coins += 3;
+        log(g, `${actor.name} collects 3 coins of Tax.`);
+        break;
+      case 'steal': {
+        const n = Math.min(2, target.coins);
+        target.coins -= n; actor.coins += n;
+        log(g, `${actor.name} steals ${n} from ${target.name}.`);
+        break;
+      }
+      case 'assassinate':
+        if (target && alive(target)) {
+          log(g, `${target.name} is assassinated.`);
+          return loseInfluence(g, target.id, 'endTurn');
+        }
+        break;
+      case 'exchange':
+        g.exchange = [
+          ...actor.cards.filter((c) => !c.revealed).map((c) => c.role),
+          draw(g), draw(g),
+        ];
+        g.phase = 'exchange';
+        return;
+    }
+    endTurn(g);
+  }
+
+  function chooseExchange(g, pid, keep) {
+    if (g.phase !== 'exchange' || pid !== g.actor) fail('You are not exchanging.');
+    const me = need(g, pid);
+    const n = hidden(me);
+    const idx = [...new Set(keep)];
+    if (idx.length !== n || idx.some((i) => !Number.isInteger(i) || i < 0 || i >= g.exchange.length)) {
+      fail(`Pick exactly ${n} card${n === 1 ? '' : 's'}.`);
+    }
+    const kept = idx.map((i) => g.exchange[i]);
+    const returned = g.exchange.filter((_, i) => !idx.includes(i));
+    me.cards = [...me.cards.filter((c) => c.revealed), ...kept.map((role) => ({ role, revealed: false }))];
+    g.deck.push(...returned);
+    shuffle(g.deck);
+    g.exchange = [];
+    log(g, `${me.name} exchanges cards with the Court deck.`);
+    endTurn(g);
+  }
+
+  // ------------------------------------------------------------ influence
+  function loseInfluence(g, pid, after) {
+    const p = need(g, pid);
+    if (!alive(p)) return cont(g, after);
+    if (hidden(p) === 1) {
+      reveal(g, p, p.cards.find((c) => !c.revealed));
+      return cont(g, after);
+    }
+    g.phase = 'loseCard';
+    g.loser = pid;
+    g.after = after;
+    if (!p.connected) onConnectionChanged(g);
+  }
+
+  function chooseLoss(g, pid, index) {
+    if (g.phase !== 'loseCard' || pid !== g.loser) fail('You don\'t need to lose a card.');
+    const p = need(g, pid);
+    const c = p.cards[index];
+    if (!c || c.revealed) fail('Pick one of your hidden cards.');
+    reveal(g, p, c);
+    const after = g.after;
+    g.loser = null; g.after = null;
+    cont(g, after);
+  }
+
+  function reveal(g, p, card) {
+    card.revealed = true;
+    const label = ROLE_LABEL[card.role];
+    log(g, `${p.name} loses ${/^[AEIOU]/.test(label) ? 'an' : 'a'} ${label}.`);
+    if (!alive(p)) log(g, `${p.name} is out of the game.`);
+  }
+
+  function cont(g, after) {
+    if (alivePlayers(g).length <= 1) return finish(g);
+    if (after === 'endTurn') return endTurn(g);
+    if (after === 'resolveAction') { g.phase = 'respondAction'; return resolveAction(g); }
+    // actionChallengeWon: the action stands, but it can still be blocked.
+    g.phase = 'respondAction';
+    g.passed = [];
+    checkResponses(g);
+  }
+
+  function endTurn(g) {
+    if (alivePlayers(g).length <= 1) return finish(g);
+    clearTurn(g);
+    do { g.turn = (g.turn + 1) % g.players.length; } while (!alive(g.players[g.turn]));
+    g.phase = 'action';
+  }
+
+  function finish(g) {
+    clearTurn(g);
+    const a = alivePlayers(g);
+    g.winner = a.length ? a[0].id : null;
+    g.phase = 'gameOver';
+    if (a.length) log(g, `${a[0].name} wins the game!`);
+  }
+
+  // ------------------------------------------------------------ views
+  // What one player is allowed to see: other players' hidden cards are masked.
+  function viewFor(g, viewerId) {
+    const me = P(g, viewerId);
+    const inGame = g.phase !== 'lobby';
+    return {
+      phase: g.phase,
+      turn: inGame && g.phase !== 'gameOver' ? current(g).id : null,
+      action: g.action, actor: g.actor, target: g.target,
+      blocker: g.blocker, blockRole: g.blockRole, loser: g.loser,
+      winner: g.winner, deck: g.deck.length,
+      log: g.log.slice(-60),
+      players: g.players.map((p) => ({
+        id: p.id, name: p.name, coins: p.coins, connected: p.connected, bot: !!p.bot,
+        alive: alive(p), waiting: inGame && p.connected && mustRespond(g, p),
+        cards: p.cards.map((c) => ({
+          role: c.revealed || p.id === viewerId ? c.role : null,
+          revealed: c.revealed,
+        })),
+      })),
+      you: me && {
+        canChallenge: !g.passed.includes(me.id) &&
+          (canChallengeAction(g, me) || canChallengeBlock(g, me)),
+        blockRoles: canBlockAction(g, me) && !g.passed.includes(me.id) ? A(g).blockers : [],
+        mustRespond: mustRespond(g, me),
+        exchange: g.phase === 'exchange' && me.id === g.actor ? g.exchange : [],
+      },
+    };
+  }
+
+  // One entry point for every player command.
+  function apply(g, pid, msg) {
+    switch (msg.t) {
+      case 'act': return declareAction(g, pid, msg.action, msg.target);
+      case 'challenge': return challenge(g, pid);
+      case 'block': return block(g, pid, msg.role);
+      case 'pass': return pass(g, pid);
+      case 'lose': return chooseLoss(g, pid, msg.index);
+      case 'exchange': return chooseExchange(g, pid, Array.isArray(msg.keep) ? msg.keep : []);
+      default: fail('Unknown command.');
+    }
+  }
+
+  const api = {
+    ROLES, ROLE_LABEL, ACTIONS, MAX_PLAYERS, GameError,
+    newGame, addPlayer, removePlayer, start, backToLobby, setConnected,
+    apply, viewFor, alive, hidden,
+  };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.Coup = api;
+})(typeof self !== 'undefined' ? self : this);
+
+</script>
+<script>
+(function () {
+'use strict';
+
+// ===================================================================== utils
+const PEER_PREFIX = 'coup-lan-game-';
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const BOT_NAMES = ['Bianca', 'Lorenzo', 'Ottavia', 'Matteo', 'Isabella', 'Cosimo', 'Lucrezia', 'Piero'];
+
+const app = document.getElementById('app');
+const layer = document.getElementById('layer');
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const rid = (n, chars = 'abcdefghijkmnpqrstuvwxyz23456789') =>
+  Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+const makeCode = () => rid(5, CODE_CHARS);
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } },
+  del(k) { try { localStorage.removeItem(k); } catch (e) { /* storage unavailable */ } },
+};
+let cid = store.get('coup.cid', null);
+if (!cid) { cid = rid(12); store.set('coup.cid', cid); }
+
+const ROLE_INFO = {
+  duke: 'Tax +3 · blocks Foreign Aid',
+  assassin: 'Pay 3 to assassinate',
+  captain: 'Steal 2 · blocks stealing',
+  ambassador: 'Exchange · blocks stealing',
+  contessa: 'Blocks assassination',
+};
+const ICON = {
+  duke: '<path d="M3 19h18M4.5 19 3 8l5 4 4-7 4 7 5-4-1.5 11"/>',
+  assassin: '<path d="M12 2.5 14 7v8h-4V7zM7 15h10M12 15v5M10 21h4"/>',
+  captain: '<circle cx="12" cy="5" r="2"/><path d="M12 7v14M8 11h8M4.5 14a7.5 7.5 0 0 0 15 0"/>',
+  ambassador: '<path d="M4 8h15l-3.5-3.5M20 16H5l3.5 3.5"/>',
+  contessa: '<path d="M12 3 19 12l-7 9-7-9z"/><circle cx="12" cy="12" r="2.4"/>',
+};
+const svg = (paths) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+const UI_ICON = {
+  book: '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 21V5"/><path d="M8 7h7"/>',
+  exit: '<path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/>',
+  x: '<path d="M6 6l12 12M18 6 6 18"/>',
+};
+
+function cardHtml(role, opts = {}) {
+  const cls = ['card'];
+  if (opts.mini) cls.push('mini');
+  if (role) cls.push('r-' + role); else cls.push('back');
+  if (opts.lost) cls.push('lost');
+  if (opts.sel) cls.push('sel');
+  if (opts.pick) cls.push('pick');
+  const attrs = opts.attrs || '';
+  const inner = role
+    ? `${svg(ICON[role])}<b>${Coup.ROLE_LABEL[role]}</b>${opts.info === false ? '' : `<small>${ROLE_INFO[role]}</small>`}`
+    : '';
+  const label = role ? Coup.ROLE_LABEL[role] + (opts.lost ? ' (lost)' : '') : 'Hidden card';
+  return `<div class="${cls.join(' ')}" role="img" aria-label="${label}" ${attrs}>${inner}</div>`;
+}
+
+let toastTimer = null;
+function toast(msg) {
+  let t = document.querySelector('.toast');
+  if (!t) { t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+  t.textContent = msg;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 3200);
+}
+
+const peerAvailable = () => typeof Peer !== 'undefined';
+
+// ===================================================================== session state
+// net: null (home) | 'host' | 'client'
+let net = null;
+let H = null;          // host: { g, code, peer, conns: Map(pid -> conn), online, error, offline, resumed }
+let C = null;          // client: { code, peer, conn, online, joined, closed, retry }
+let view = null;       // latest view of the game for this player
+let myId = null;
+let hostId = null;
+let roomCode = null;
+const ui = { loseSel: null, exSel: [], key: '', sheet: null };
+
+const myName = () => (store.get('coup.name', '') || 'Player').slice(0, 16);
+
+// ===================================================================== host
+function hostCreate({ offline = false, resume = false } = {}) {
+  const saved = resume ? store.get('coup.host', null) : null;
+  H = {
+    g: saved ? saved.g : Coup.newGame(),
+    code: saved ? saved.code : makeCode(),
+    offline: saved ? !!saved.offline : offline,
+    resumed: !!saved, peer: null, conns: new Map(), online: false, error: null,
+  };
+  net = 'host'; myId = cid; hostId = cid; roomCode = H.code;
+  if (!saved) {
+    Coup.addPlayer(H.g, cid, myName());
+  } else {
+    const me = H.g.players.find((p) => p.id === cid);
+    if (me) me.connected = true;
+    for (const p of H.g.players) if (p.id !== cid && !p.bot) Coup.setConnected(H.g, p.id, false);
+  }
+  if (H.offline) {
+    // Practice: fill the table with bots.
+    if (!saved) { hostAddBot(); hostAddBot(); hostAddBot(); }
+  } else {
+    openHostPeer(0);
+  }
+  ui.sheet = null;
+  hostChanged();
+}
+
+function openHostPeer(attempt) {
+  if (!peerAvailable()) {
+    H.error = 'Online play could not load. Check your internet connection, or practice against bots.';
+    render();
+    return;
+  }
+  const peer = new Peer(PEER_PREFIX + H.code, { debug: 0 });
+  H.peer = peer;
+  peer.on('open', () => { H.online = true; H.error = null; render(); });
+  peer.on('connection', (conn) => hostAccept(conn));
+  peer.on('disconnected', () => {
+    H.online = false; render();
+    setTimeout(() => { if (!peer.destroyed && peer.disconnected) { try { peer.reconnect(); } catch (e) { /* retry later */ } } }, 2000);
+  });
+  peer.on('error', (e) => {
+    if (H.peer !== peer) return;
+    if (e.type === 'unavailable-id') {
+      peer.destroy();
+      if (H.resumed && attempt < 8) {
+        H.error = 'Reopening the room…';
+        setTimeout(() => { if (H && H.peer === peer) openHostPeer(attempt + 1); }, 3000);
+      } else if (H.g.phase === 'lobby') {
+        H.code = makeCode(); roomCode = H.code; H.resumed = false;
+        openHostPeer(0);
+      } else {
+        H.error = 'This room code is still in use elsewhere. Close other tabs hosting it, or start a new room.';
+      }
+      render();
+    } else if (['network', 'server-error', 'socket-error', 'socket-closed', 'disconnected'].includes(e.type)) {
+      H.online = false;
+      H.error = 'Lost the connection to the matchmaking server. Retrying…';
+      render();
+      setTimeout(() => { if (!peer.destroyed && peer.disconnected) { try { peer.reconnect(); } catch (err) { /* retry later */ } } }, 3000);
+    }
+  });
+}
+
+function hostAccept(conn) {
+  let pid = null;
+  conn.on('data', (msg) => {
+    if (!H) return;
+    try {
+      if (msg && msg.t === 'hello') pid = hostHello(conn, msg);
+      else if (pid) Coup.apply(H.g, pid, msg || {});
+    } catch (e) {
+      const text = e instanceof Coup.GameError ? e.message : 'That move could not be made.';
+      safeSend(conn, { t: 'error', msg: text, fatal: !pid });
+      if (!pid) setTimeout(() => conn.close(), 400);
+    }
+    hostChanged();
+  });
+  const drop = () => {
+    if (!H || !pid || H.conns.get(pid) !== conn) return;
+    H.conns.delete(pid);
+    if (H.g.phase === 'lobby') Coup.removePlayer(H.g, pid);
+    else Coup.setConnected(H.g, pid, false);
+    hostChanged();
+  };
+  conn.on('close', drop);
+  conn.on('error', drop);
+}
+
+function hostHello(conn, msg) {
+  const g = H.g;
+  let name = String(msg.name || '').trim().slice(0, 16) || 'Player';
+  const wanted = String(msg.id || '');
+  let p = g.players.find((q) => q.id === wanted && !q.bot && q.id !== cid);
+  if (!p && g.phase !== 'lobby') {
+    // Rejoin under the same name, e.g. from a new browser. The old connection
+    // may not have been noticed as dropped yet, so prefer disconnected seats.
+    const same = g.players.filter((q) => !q.bot && q.id !== cid && q.name.toLowerCase() === name.toLowerCase());
+    p = same.find((q) => !q.connected) || same[0];
+  }
+  if (!p) {
+    if (g.phase !== 'lobby') throw new Coup.GameError('This game has already started. Ask the host to return to the lobby.');
+    const taken = new Set(g.players.map((q) => q.name.toLowerCase()));
+    let unique = name;
+    for (let i = 2; taken.has(unique.toLowerCase()); i++) unique = `${name} ${i}`;
+    const id = wanted && wanted !== cid ? wanted : rid(12);
+    Coup.addPlayer(g, id, unique);
+    p = g.players[g.players.length - 1];
+  }
+  const old = H.conns.get(p.id);
+  if (old && old !== conn) { try { old.close(); } catch (e) { /* already closed */ } }
+  H.conns.set(p.id, conn);
+  Coup.setConnected(g, p.id, true);
+  safeSend(conn, { t: 'welcome', you: p.id });
+  return p.id;
+}
+
+function hostAddBot() {
+  const g = H.g;
+  const used = new Set(g.players.map((p) => p.name));
+  const name = BOT_NAMES.find((n) => !used.has(n)) || 'Bot ' + (g.players.length + 1);
+  Coup.addPlayer(g, 'bot-' + rid(6), name);
+  g.players[g.players.length - 1].bot = true;
+}
+
+// Commands from this device when hosting.
+function hostLocal(msg) {
+  const g = H.g;
+  switch (msg.t) {
+    case 'start': Coup.start(g); break;
+    case 'lobby': Coup.backToLobby(g); break;
+    case 'addBot': hostAddBot(); break;
+    case 'removeBot': {
+      const b = g.players.find((p) => p.id === msg.id && p.bot);
+      if (b) Coup.removePlayer(g, b.id);
+      break;
+    }
+    default: Coup.apply(g, cid, msg);
+  }
+}
+
+function hostChanged() {
+  if (!H) return;
+  store.set('coup.host', { code: H.code, g: H.g, offline: H.offline });
+  for (const [pid, conn] of H.conns) {
+    if (conn.open) safeSend(conn, { t: 'state', room: H.code, hostId: cid, view: Coup.viewFor(H.g, pid) });
+  }
+  setView(Coup.viewFor(H.g, cid));
+  scheduleBots();
+}
+
+function safeSend(conn, msg) { try { conn.send(msg); } catch (e) { /* connection closing */ } }
+
+// ===================================================================== bots
+let botTimer = null;
+const VALUE = { duke: 5, assassin: 4, captain: 3, contessa: 2, ambassador: 1 };
+const handOf = (p) => p.cards.filter((c) => !c.revealed).map((c) => c.role);
+
+function botPending(g) {
+  if (g.phase === 'action') return g.players[g.turn].bot ? g.players[g.turn] : null;
+  if (g.phase === 'loseCard') return g.players.find((p) => p.bot && p.id === g.loser) || null;
+  if (g.phase === 'exchange') return g.players.find((p) => p.bot && p.id === g.actor) || null;
+  if (g.phase === 'respondAction' || g.phase === 'respondBlock') {
+    const ready = g.players.filter((p) => p.bot && Coup.viewFor(g, p.id).you.mustRespond);
+    return ready.length ? pick(ready) : null;
+  }
+  return null;
+}
+
+function scheduleBots() {
+  clearTimeout(botTimer);
+  if (!H) return;
+  const bot = botPending(H.g);
+  if (!bot) return;
+  const delay = H.g.phase === 'action' ? 1100 : 750;
+  botTimer = setTimeout(() => {
+    if (!H) return;
+    const b = botPending(H.g);
+    if (!b) return;
+    try { botMove(H.g, b); } catch (e) { try { Coup.apply(H.g, b.id, { t: 'pass' }); } catch (err) { /* nothing to do */ } }
+    hostChanged();
+  }, delay + Math.random() * 600);
+}
+
+function botMove(g, me) {
+  const own = handOf(me);
+  if (g.phase === 'loseCard') {
+    const idx = me.cards.map((c, i) => [c, i]).filter(([c]) => !c.revealed)
+      .sort((a, b) => VALUE[a[0].role] - VALUE[b[0].role])[0][1];
+    return Coup.apply(g, me.id, { t: 'lose', index: idx });
+  }
+  if (g.phase === 'exchange') {
+    const keep = g.exchange.map((r, i) => [r, i]).sort((a, b) => VALUE[b[0]] - VALUE[a[0]])
+      .slice(0, own.length).map(([, i]) => i);
+    return Coup.apply(g, me.id, { t: 'exchange', keep });
+  }
+  if (g.phase === 'action') {
+    const foes = g.players.filter((p) => p.id !== me.id && Coup.alive(p));
+    const strongest = foes.slice().sort((a, b) => Coup.hidden(b) - Coup.hidden(a) || b.coins - a.coins)[0];
+    const richest = foes.slice().sort((a, b) => b.coins - a.coins)[0];
+    let action = 'income';
+    let target = null;
+    if (me.coins >= 7) { action = 'coup'; target = strongest; }
+    else if (own.includes('assassin') && me.coins >= 3) { action = 'assassinate'; target = strongest; }
+    else if (own.includes('duke')) action = 'tax';
+    else if (own.includes('captain') && richest.coins >= 2) { action = 'steal'; target = richest; }
+    else if (own.includes('ambassador') && Math.random() < 0.5) action = 'exchange';
+    else {
+      const r = Math.random();
+      action = r < 0.22 ? 'tax' : r < 0.6 ? 'foreignAid' : 'income';
+    }
+    return Coup.apply(g, me.id, { t: 'act', action, target: target && target.id });
+  }
+  const you = Coup.viewFor(g, me.id).you;
+  const real = you.blockRoles.find((r) => own.includes(r));
+  if (real) return Coup.apply(g, me.id, { t: 'block', role: real });
+  if (you.blockRoles.includes('contessa') && own.length === 1) {
+    return Coup.apply(g, me.id, { t: 'block', role: 'contessa' });
+  }
+  if (you.canChallenge) {
+    const claimed = g.phase === 'respondBlock' ? g.blockRole : Coup.ACTIONS[g.action].claim;
+    let chance = 0.08 + own.filter((r) => r === claimed).length * 0.3;
+    if (g.action === 'assassinate' && g.target === me.id && g.phase === 'respondAction') chance += 0.25;
+    if (Math.random() < chance) return Coup.apply(g, me.id, { t: 'challenge' });
+  }
+  return Coup.apply(g, me.id, { t: 'pass' });
+}
+
+// ===================================================================== client
+function joinRoom(code) {
+  if (!peerAvailable()) { toast('Online play could not load. Check your internet connection.'); return; }
+  C = { code, peer: new Peer({ debug: 0 }), conn: null, online: false, joined: false, closed: false, retry: null, tries: 0 };
+  net = 'client'; roomCode = code; myId = null; hostId = null; view = null;
+  store.set('coup.lastRoom', code);
+  const c = C;
+  c.peer.on('open', () => clientConnect(c));
+  c.peer.on('error', (e) => {
+    if (c.closed) return;
+    if (e.type === 'peer-unavailable') {
+      if (!c.joined && ++c.tries >= 3) {
+        leaveRoom(true);
+        toast(`No open room with code ${code}. Check the code with the host.`);
+        return;
+      }
+      scheduleRetry(c);
+    } else if (['network', 'server-error', 'socket-error', 'socket-closed', 'disconnected'].includes(e.type)) {
+      c.online = false; render(); scheduleRetry(c);
+    }
+  });
+  c.peer.on('disconnected', () => {
+    if (!c.closed) setTimeout(() => { if (!c.closed && c.peer.disconnected) { try { c.peer.reconnect(); } catch (e) { /* retry later */ } } }, 2000);
+  });
+  render();
+}
+
+function clientConnect(c) {
+  if (c.closed || c !== C) return;
+  const conn = c.peer.connect(PEER_PREFIX + c.code, { reliable: true });
+  c.conn = conn;
+  conn.on('open', () => {
+    c.online = true;
+    safeSend(conn, { t: 'hello', id: cid, name: myName() });
+    render();
+  });
+  conn.on('data', (msg) => { if (c === C) clientMessage(msg || {}); });
+  conn.on('close', () => {
+    if (c.conn !== conn || c.closed) return;
+    c.online = false; render(); scheduleRetry(c);
+  });
+}
+
+function scheduleRetry(c) {
+  if (c.closed) return;
+  clearTimeout(c.retry);
+  c.retry = setTimeout(() => {
+    if (c.closed) return;
+    if (c.peer.disconnected) { try { c.peer.reconnect(); } catch (e) { /* will retry */ } }
+    else clientConnect(c);
+  }, 2500);
+}
+
+function clientMessage(msg) {
+  if (msg.t === 'welcome') { myId = msg.you; C.joined = true; }
+  else if (msg.t === 'state') { hostId = msg.hostId; roomCode = msg.room; setView(msg.view); }
+  else if (msg.t === 'error') {
+    if (msg.fatal) { leaveRoom(true); toast(msg.msg); }
+    else toast(msg.msg);
+  }
+}
+
+// ===================================================================== commands
+function send(msg) {
+  if (net === 'host') {
+    try { hostLocal(msg); } catch (e) { toast(e instanceof Coup.GameError ? e.message : 'That move could not be made.'); }
+    hostChanged();
+  } else if (net === 'client') {
+    if (C.conn && C.conn.open) safeSend(C.conn, msg);
+    else toast('Reconnecting to the host…');
+  }
+}
+
+function leaveRoom(silent) {
+  clearTimeout(botTimer);
+  if (net === 'host' && H) {
+    if (H.peer) { try { H.peer.destroy(); } catch (e) { /* ignore */ } }
+    store.del('coup.host');
+    H = null;
+  }
+  if (net === 'client' && C) {
+    C.closed = true; clearTimeout(C.retry);
+    try { C.peer.destroy(); } catch (e) { /* ignore */ }
+    if (!silent) store.del('coup.lastRoom');
+    C = null;
+  }
+  net = null; view = null; myId = null; hostId = null; ui.sheet = null;
+  render();
+}
+
+// ===================================================================== view helpers
+function setView(v) {
+  view = v;
+  const me = v.players.find((p) => p.id === myId);
+  const key = [v.phase, v.loser, me ? me.cards.map((c) => (c.revealed ? 1 : 0)).join('') : '', (v.you && v.you.exchange || []).join()].join('|');
+  if (key !== ui.key) { ui.key = key; ui.loseSel = null; ui.exSel = []; }
+  if (ui.sheet && ui.sheet.type === 'target' && !(v.phase === 'action' && v.turn === myId)) ui.sheet = null;
+  render();
+}
+
+const nameOf = (id, you = false) => {
+  if (you && id === myId) return 'You';
+  const p = view.players.find((q) => q.id === id);
+  return p ? p.name : '?';
+};
+const verb = (subject, s, plural) => (subject === 'You' ? plural : s);
+
+function statusText(v) {
+  const a = v.action && Coup.ACTIONS[v.action];
+  const actor = nameOf(v.actor, true);
+  const target = v.target === myId ? 'you' : nameOf(v.target);
+  const waiting = v.players.filter((p) => p.waiting).map((p) => (p.id === myId ? 'you' : p.name));
+  const sub = waiting.length ? `Waiting for ${waiting.join(', ')}` : '';
+  switch (v.phase) {
+    case 'action':
+      return [v.turn === myId ? 'Your turn' : `${nameOf(v.turn)}’s turn`, v.turn === myId ? 'Choose an action' : ''];
+    case 'respondAction': {
+      const claims = verb(actor, 'claims', 'claim');
+      const text = {
+        foreignAid: `${actor} ${verb(actor, 'takes', 'take')} Foreign Aid (+2)`,
+        tax: `${actor} ${claims} Duke to take Tax (+3)`,
+        steal: `${actor} ${claims} Captain to steal from ${target}`,
+        assassinate: `${actor} ${claims} Assassin against ${target}`,
+        exchange: `${actor} ${claims} Ambassador to exchange`,
+      }[v.action];
+      return [text, sub];
+    }
+    case 'respondBlock': {
+      const b = nameOf(v.blocker, true);
+      return [`${b} ${verb(b, 'blocks', 'block')} ${a.label} with ${Coup.ROLE_LABEL[v.blockRole]}`, sub];
+    }
+    case 'loseCard':
+      return [v.loser === myId ? 'You must give up an influence' : `${nameOf(v.loser)} must give up an influence`, ''];
+    case 'exchange':
+      return [`${actor} ${verb(actor, 'is', 'are')} exchanging with the Court`, ''];
+    case 'gameOver':
+      return ['Game over', ''];
+  }
+  return ['', ''];
+}
+
+// ===================================================================== render
+function render() {
+  if (!net) app.innerHTML = renderHome();
+  else if (!view) app.innerHTML = renderBar() + renderConnecting();
+  else if (view.phase === 'lobby') app.innerHTML = renderBar() + renderLobby();
+  else app.innerHTML = renderBar() + renderTable();
+  renderSheet();
+}
+
+function renderHome() {
+  const params = new URLSearchParams(location.search);
+  const codeFromLink = (params.get('room') || location.hash.replace('#', '') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
+  const saved = store.get('coup.host', null);
+  const lastRoom = store.get('coup.lastRoom', null);
+  const canResume = saved && saved.g && saved.g.phase !== 'lobby' && saved.g.phase !== 'gameOver';
+  const fan = ['ambassador', 'captain', 'duke', 'assassin', 'contessa'].map((r) => cardHtml(r, { info: false })).join('');
+  return `
+  <main class="home">
+    <div class="brand">
+      <div class="fan" aria-hidden="true">${fan}</div>
+      <h1>C<span>O</span>UP</h1>
+      <p>Bluff, steal and assassinate your way to power. 2–6&nbsp;players.</p>
+    </div>
+    <div class="panel">
+      <div>
+        <label class="lbl" for="name">Your name</label>
+        <input class="field" id="name" maxlength="16" autocomplete="nickname" placeholder="e.g. Giulia" value="${esc(store.get('coup.name', ''))}">
+      </div>
+      ${canResume ? `<button class="btn wide resume" data-do="resume">Resume your game (room ${esc(saved.code)})</button>` : ''}
+      <button class="btn primary wide" data-do="host">Create a room</button>
+      <div class="divider">or join friends</div>
+      <div class="row">
+        <input class="field code grow" id="code" maxlength="5" autocomplete="off" autocapitalize="characters" placeholder="CODE" aria-label="Room code" value="${esc(codeFromLink || '')}">
+        <button class="btn" data-do="join">Join</button>
+      </div>
+      ${lastRoom && !codeFromLink ? `<button class="link" data-do="rejoin">Rejoin room ${esc(lastRoom)}</button>` : ''}
+    </div>
+    <button class="btn ghost wide" data-do="practice">Practice against bots</button>
+    <button class="link" data-do="rules">How to play</button>
+    ${peerAvailable() ? '' : '<p class="note">Online rooms need an internet connection. Practice mode works offline.</p>'}
+  </main>`;
+}
+
+function renderBar() {
+  let online = false;
+  if (net === 'host') online = H.offline || H.online;
+  if (net === 'client') online = C && C.online;
+  const label = net === 'host' && H.offline ? 'Practice' : `<span class="code">${esc(roomCode || '')}</span>`;
+  const dot = net === 'host' && H.offline ? '' : `<span class="dot ${online ? 'on' : 'off'}" title="${online ? 'Connected' : 'Connecting'}"></span>`;
+  let msg = '';
+  if (net === 'host' && H.error) msg = H.error;
+  else if (net === 'client' && C && C.joined && !C.online) msg = 'Connection to the host lost. Reconnecting…';
+  return `
+  <header class="bar">
+    <div class="title"><b>COUP</b>${label}${dot}</div>
+    <button class="iconbtn" data-do="rules" aria-label="How to play">${svg(UI_ICON.book)}</button>
+    <button class="iconbtn" data-do="leave" aria-label="Leave room">${svg(UI_ICON.exit)}</button>
+  </header>
+  ${msg ? `<div class="netmsg" role="status">${esc(msg)}</div>` : ''}`;
+}
+
+function renderConnecting() {
+  return `<div class="lobby"><p class="hint">Connecting to room ${esc(roomCode || '')}…</p></div>`;
+}
+
+function inviteLink() {
+  const base = location.href.split('#')[0].split('?')[0];
+  return `${base}?room=${roomCode}`;
+}
+
+function renderLobby() {
+  const v = view;
+  const isHost = net === 'host';
+  const offline = isHost && H.offline;
+  const people = v.players.map((p) => {
+    const tags = [];
+    if (p.id === hostId) tags.push('<span class="tag host">Host</span>');
+    if (p.id === myId) tags.push('<span class="tag">You</span>');
+    if (p.bot) tags.push('<span class="tag">Bot</span>');
+    const remove = isHost && p.bot ? `<button class="iconbtn" data-do="removeBot" data-id="${esc(p.id)}" aria-label="Remove ${esc(p.name)}">${svg(UI_ICON.x)}</button>` : '';
+    return `<li><span class="avatar">${esc(p.name.slice(0, 1).toUpperCase())}</span><span class="nm">${esc(p.name)}</span>${tags.join('')}${remove}</li>`;
+  }).join('');
+  const invite = offline ? '' : `
+    <section class="panel invite">
+      <label class="lbl">Room code</label>
+      <div class="big">${esc(roomCode)}</div>
+      <p class="note">Friends open this page and enter the code, or use the link.</p>
+      <button class="btn wide" data-do="copy">Copy invite link</button>
+    </section>`;
+  const n = v.players.length;
+  const controls = isHost
+    ? `<div class="row">
+         <button class="btn grow" data-do="addBot" ${n >= Coup.MAX_PLAYERS ? 'disabled' : ''}>Add a bot</button>
+         <button class="btn primary grow" data-do="start" ${n < 2 ? 'disabled' : ''}>${n < 2 ? 'Need 2 players' : 'Start game'}</button>
+       </div>`
+    : '<p class="hint">Waiting for the host to start the game…</p>';
+  return `
+  <main class="lobby">
+    ${invite}
+    <section>
+      <label class="lbl">Players · ${n}/${Coup.MAX_PLAYERS}</label>
+      <ul class="people">${people}</ul>
+    </section>
+    ${controls}
+  </main>`;
+}
+
+function renderTable() {
+  const v = view;
+  const me = v.players.find((p) => p.id === myId);
+  const foes = v.players.filter((p) => p.id !== myId);
+  const [head, sub] = statusText(v);
+  const foeHtml = foes.map((p) => {
+    const cls = ['foe'];
+    if (v.turn === p.id) cls.push('turn');
+    if (!p.alive) cls.push('out');
+    const off = !p.connected ? '<span class="dot off" title="Disconnected"></span>' : '';
+    const state = !p.alive ? 'Out' : p.waiting ? 'Deciding…' : v.loser === p.id ? 'Choosing a card…' : '';
+    return `<div class="${cls.join(' ')}">
+      <div class="who">${off}<span>${esc(p.name)}</span></div>
+      <div class="stuff">
+        <div class="hand">${p.cards.map((c) => cardHtml(c.role, { mini: true, lost: c.revealed })).join('')}</div>
+        <span class="coin" aria-label="${p.coins} coins">${p.coins}</span>
+      </div>
+      <div class="state">${state}</div>
+    </div>`;
+  }).join('');
+  const logHtml = v.log.slice().reverse().map((l) => `<li>${esc(l)}</li>`).join('');
+  return `
+  <main class="table">
+    <section class="foes n${foes.length}" aria-label="Opponents">${foeHtml}</section>
+    <div class="banner" aria-live="polite"><strong>${esc(head)}</strong>${sub ? `<span>${esc(sub)}</span>` : ''}</div>
+    <ol class="log" aria-label="Game log">${logHtml}</ol>
+    ${me && !(v.phase === 'exchange' && v.actor === myId) ? renderMine(me) : ''}
+    <section class="controls">${renderControls(me)}</section>
+  </main>`;
+}
+
+function renderMine(me) {
+  const losing = view.phase === 'loseCard' && view.loser === myId;
+  const cards = me.cards.map((c, i) => {
+    const can = losing && !c.revealed;
+    return cardHtml(c.role, {
+      lost: c.revealed, sel: losing && ui.loseSel === i, pick: can,
+      attrs: can ? `data-do="loseSel" data-i="${i}" tabindex="0"` : '',
+    });
+  }).join('');
+  return `<section class="mine" aria-label="Your hand">${cards}
+    <div class="coins"><span class="coin big">${me.coins}</span>coins</div></section>`;
+}
+
+function renderControls(me) {
+  const v = view;
+  const you = v.you || {};
+  if (v.phase === 'gameOver') {
+    const won = v.winner === myId;
+    const host = net === 'host';
+    return `<p class="winner">${won ? 'You win.' : esc(nameOf(v.winner)) + ' wins.'}</p>
+      ${host ? `<div class="row"><button class="btn grow" data-do="lobby">Back to lobby</button><button class="btn primary grow" data-do="start">Play again</button></div>`
+        : '<p class="hint">Waiting for the host to start another game…</p>'}`;
+  }
+  if (!me) return '<p class="hint">You are watching this game.</p>';
+  if (!me.alive) return '<p class="hint">You are out. Watch how it ends.</p>';
+
+  if (v.phase === 'loseCard' && v.loser === myId) {
+    return `<p class="hint">Tap the card you will give up.</p>
+      <button class="btn danger wide" data-do="lose" ${ui.loseSel == null ? 'disabled' : ''}>Give up this influence</button>`;
+  }
+  if (v.phase === 'exchange' && you.exchange && you.exchange.length) {
+    const needN = me.cards.filter((c) => !c.revealed).length;
+    const opts = you.exchange.map((r, i) => cardHtml(r, {
+      sel: ui.exSel.includes(i), pick: true, attrs: `data-do="exSel" data-i="${i}" tabindex="0"`,
+    })).join('');
+    return `<p class="hint">Keep ${needN} card${needN === 1 ? '' : 's'}. The rest go back to the Court deck.</p>
+      <div class="choices">${opts}</div>
+      <button class="btn primary wide" data-do="exchange" ${ui.exSel.length === needN ? '' : 'disabled'}>Keep selected</button>`;
+  }
+  if (v.phase === 'action' && v.turn === myId) {
+    const mustCoup = me.coins >= 10;
+    const buttons = Object.entries(Coup.ACTIONS).map(([key, a]) => {
+      const ok = me.coins >= a.cost && (!mustCoup || key === 'coup');
+      const effect = {
+        income: '+1 coin', foreignAid: '+2 coins', coup: 'Pay 7', tax: 'Duke · +3',
+        assassinate: 'Assassin · pay 3', steal: 'Captain · take 2', exchange: 'Ambassador',
+      }[key];
+      return `<button class="act ${a.claim ? 'r-' + a.claim : ''}" data-do="act" data-a="${key}" ${ok ? '' : 'disabled'}><b>${a.label}</b><small>${effect}</small></button>`;
+    }).join('');
+    return `${mustCoup ? '<p class="hint">You have 10 or more coins, so you must Coup.</p>' : ''}<div class="actions">${buttons}</div>`;
+  }
+  if (you.mustRespond) {
+    const challengeLabel = v.phase === 'respondBlock' ? 'Challenge the block' : 'Challenge';
+    const blocks = (you.blockRoles || []).map((r) =>
+      `<button class="btn" style="background:var(--${r});border-color:transparent;color:#fff" data-do="block" data-r="${r}">Block as ${Coup.ROLE_LABEL[r]}</button>`).join('');
+    return `<div class="respond">
+      ${you.canChallenge ? `<button class="btn danger" data-do="challenge">${challengeLabel}</button>` : ''}
+      ${blocks}
+      <button class="btn" data-do="pass">Allow</button>
+    </div>`;
+  }
+  return '<p class="hint">Waiting for the other players…</p>';
+}
+
+// ===================================================================== sheets
+function renderSheet() {
+  const s = ui.sheet;
+  if (!s) { layer.innerHTML = ''; return; }
+  let body = '';
+  if (s.type === 'rules') body = rulesHtml();
+  if (s.type === 'target') {
+    const a = Coup.ACTIONS[s.action];
+    const targets = view.players.filter((p) => p.id !== myId && p.alive);
+    body = `<h2>${a.label}: choose a target</h2>` + targets.map((p) => {
+      const left = p.cards.filter((c) => !c.revealed).length;
+      return `<button class="pickrow" data-do="target" data-id="${esc(p.id)}">
+        <span class="coin">${p.coins}</span><span class="grow"><b>${esc(p.name)}</b><br><small>${left} influence left</small></span></button>`;
+    }).join('') + '<button class="btn ghost wide" data-do="close">Cancel</button>';
+  }
+  if (s.type === 'leave') {
+    const host = net === 'host' && !H.offline;
+    body = `<h2>Leave this room?</h2>
+      <p>${host ? 'You are the host. Leaving ends the game for everyone in the room.' : 'You can rejoin with the same name while the game is running.'}</p>
+      <div class="row"><button class="btn grow" data-do="close">Stay</button><button class="btn danger grow" data-do="leaveYes">Leave</button></div>`;
+  }
+  layer.innerHTML = `<div class="scrim" data-do="scrim"><div class="sheet" role="dialog" aria-modal="true">${body}</div></div>`;
+}
+
+function rulesHtml() {
+  const roles = Coup.ROLES.map((r) => `<div class="rolerow">${cardHtml(r, { info: false })}<div><b>${Coup.ROLE_LABEL[r]}</b><br>${ROLE_INFO[r]}</div></div>`).join('');
+  return `<h2>How to play</h2>
+    <p>Everyone starts with 2 coins and 2 face-down influence cards. Lose both cards and you are out. The last player with influence wins.</p>
+    <p>On your turn, take one action. You may claim any character, even one you don’t hold. Anyone can challenge a claim. If it was a bluff, the bluffer loses an influence. If it was true, the challenger loses one, and the claimer shuffles the revealed card back and draws a new one.</p>
+    <h3>General actions</h3>
+    <p><b>Income</b>: take 1 coin. Can’t be stopped.<br>
+    <b>Foreign Aid</b>: take 2 coins. A Duke can block it.<br>
+    <b>Coup</b>: pay 7 coins; the target loses an influence. Can’t be stopped. With 10 or more coins you must Coup.</p>
+    <h3>Characters</h3>${roles}
+    <p class="note">Assassination costs 3 coins, which stay spent if it is blocked but come back if the Assassin claim is caught as a bluff. An Ambassador draws 2 cards and keeps as many as their influence. In a 2-player game the first player starts with 1 coin.</p>
+    <button class="btn wide" data-do="close">Close</button>`;
+}
+
+// ===================================================================== events
+function saveName() {
+  const el = document.getElementById('name');
+  const n = el ? el.value.trim() : '';
+  if (!n) { toast('Enter your name first.'); if (el) el.focus(); return false; }
+  store.set('coup.name', n.slice(0, 16));
+  return true;
+}
+
+const handlers = {
+  host() { if (saveName()) hostCreate({}); },
+  practice() { const el = document.getElementById('name'); if (el && el.value.trim()) store.set('coup.name', el.value.trim().slice(0, 16)); hostCreate({ offline: true }); },
+  resume() { if (saveName()) hostCreate({ resume: true }); },
+  join() {
+    const code = (document.getElementById('code').value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (code.length !== 5) { toast('Room codes have 5 characters.'); return; }
+    if (saveName()) joinRoom(code);
+  },
+  rejoin() { if (saveName()) joinRoom(store.get('coup.lastRoom', '')); },
+  rules() { ui.sheet = { type: 'rules' }; renderSheet(); },
+  close() { ui.sheet = null; renderSheet(); },
+  scrim(d, e) { if (e.target.classList.contains('scrim')) handlers.close(); },
+  leave() {
+    if (!view || view.phase === 'lobby' && net === 'client') { leaveRoom(); return; }
+    ui.sheet = { type: 'leave' }; renderSheet();
+  },
+  leaveYes() { leaveRoom(); },
+  copy() {
+    const link = inviteLink();
+    const done = () => toast('Invite link copied');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(link).then(done, () => toast(link));
+    } else toast(link);
+  },
+  addBot() { send({ t: 'addBot' }); },
+  removeBot(d) { send({ t: 'removeBot', id: d.id }); },
+  start() { send({ t: 'start' }); },
+  lobby() { send({ t: 'lobby' }); },
+  act(d) {
+    if (Coup.ACTIONS[d.a].target) { ui.sheet = { type: 'target', action: d.a }; renderSheet(); }
+    else send({ t: 'act', action: d.a });
+  },
+  target(d) { const a = ui.sheet.action; ui.sheet = null; renderSheet(); send({ t: 'act', action: a, target: d.id }); },
+  challenge() { send({ t: 'challenge' }); },
+  block(d) { send({ t: 'block', role: d.r }); },
+  pass() { send({ t: 'pass' }); },
+  loseSel(d) { ui.loseSel = Number(d.i); render(); },
+  lose() { if (ui.loseSel != null) send({ t: 'lose', index: ui.loseSel }); },
+  exSel(d) {
+    const i = Number(d.i);
+    const me = view.players.find((p) => p.id === myId);
+    const needN = me.cards.filter((c) => !c.revealed).length;
+    if (ui.exSel.includes(i)) ui.exSel = ui.exSel.filter((x) => x !== i);
+    else if (ui.exSel.length < needN) ui.exSel = [...ui.exSel, i];
+    render();
+  },
+  exchange() { send({ t: 'exchange', keep: ui.exSel }); },
+};
+
+function dispatch(e) {
+  const el = e.target.closest('[data-do]');
+  if (!el || el.disabled) return;
+  const fn = handlers[el.dataset.do];
+  if (fn) fn(el.dataset, e);
+}
+document.addEventListener('click', dispatch);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && ui.sheet) { handlers.close(); return; }
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.card[data-do]')) { e.preventDefault(); dispatch(e); }
+  if (e.key === 'Enter' && e.target.id === 'code') handlers.join();
+});
+window.addEventListener('beforeunload', (e) => {
+  if (net === 'host' && !H.offline && view && view.phase !== 'lobby' && view.phase !== 'gameOver') {
+    e.preventDefault(); e.returnValue = '';
+  }
+});
+
+// Test hook (used only by automated checks).
+window.__coup = { state: () => ({ net, view, H, myId }), handlers, send };
+
+render();
+})();
+
+</script>
+</body>
+</html>
